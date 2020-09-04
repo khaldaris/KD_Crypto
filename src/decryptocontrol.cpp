@@ -38,9 +38,9 @@ bool DeCryptoControl::readFile(std::string inFullPathAndName)
         this->effective = READ_FILE_ERROR;
         return false;
     }
-    fseek(inFile, 0, SEEK_END);
-    this->encryptedLength = ftell(inFile);
-    fseek(inFile, 0, SEEK_SET);
+    _fseeki64(inFile, 0, SEEK_END);
+    this->encryptedLength = _ftelli64(inFile);
+    _fseeki64(inFile, 0, SEEK_SET);
 
     this->encrypted.clear();
     this->encrypted.reserve(this->encryptedLength);

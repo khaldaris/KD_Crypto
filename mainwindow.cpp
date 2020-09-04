@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent)
     fileName = "";
     dropStatus = true;
     cc = nullptr;
+    setWindowIcon(QIcon(":/ico/Resources/ico/main.ico"));
     QObject::connect(this,SIGNAL(cryptoFinished()),this,SLOT(onSaveBegin()));
 }
 QString getFileName(QString fullPathAndName)
@@ -108,6 +109,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
             if(inputKey.isEmpty())
             {
                 ui->statusBarLabel->setText("密码为空，请输入些内容");
+                dropStatus = true;
                 return;
             }
             if(fileName.isEmpty())
@@ -121,7 +123,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
             ui->statusBarLabel->setText("解密中...");
             QFuture<bool> future = QtConcurrent::run([&](){
                 delete this->cc;
-                this->cc = new DeCryptoControl(fileName.toStdString(),ui->lineEdit_key->text().toStdString());
+                this->cc = new DeCryptoControl(std::string((const char*)fileName.toLocal8Bit()),ui->lineEdit_key->text().toStdString());
                 this->cc->decrypt();
                 return true;
             });
@@ -135,7 +137,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
             ui->statusBarLabel->setText("加密中...");
             QFuture<bool> future = QtConcurrent::run([&](){
                 delete this->cc;
-                this->cc = new EnCryptoControl(fileName.toStdString(),ui->lineEdit_key->text().toStdString(),1);
+                this->cc = new EnCryptoControl(std::string((const char*)fileName.toLocal8Bit()),ui->lineEdit_key->text().toStdString(),1);
                 this->cc->encrypt();
                 return true;
             });

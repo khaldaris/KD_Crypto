@@ -43,9 +43,9 @@ bool EnCryptoControl::readFile(std::string inFullPathAndName)
         return false;
         this->effective = READ_FILE_ERROR;
     }
-    fseek(inFile, 0, SEEK_END);
-    this->plainLength = ftell(inFile);
-    fseek(inFile, 0, SEEK_SET);
+    _fseeki64(inFile, 0, SEEK_END);
+    this->plainLength = _ftelli64(inFile);
+    _fseeki64(inFile, 0, SEEK_SET);
 
     this->plain.clear();
     this->plain.reserve(this->plainLength);
