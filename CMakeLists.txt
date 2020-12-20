@@ -8,7 +8,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
@@ -21,10 +21,10 @@ MESSAGE(STSTUS "###################################")
 MESSAGE(STATUS "operation system is ${CMAKE_SYSTEM}")
 IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
 MESSAGE(STATUS "current platform: Linux ")
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/Release/Linux)
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin/Linux)
 ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Windows")
 MESSAGE(STATUS "current platform: Windows")
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/Release/Windows)
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin/Windows)
 ELSEIF (CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
 MESSAGE(STATUS "current platform: FreeBSD")
 ELSE ()
@@ -34,6 +34,7 @@ MESSAGE(STSTUS "###################################")
 
 INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/include)
 add_executable(KD_Crypto WIN32
+#add_executable(KD_Crypto
     main.cpp
     mainwindow.h
     mainwindow.cpp

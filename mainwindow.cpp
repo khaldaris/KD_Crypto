@@ -1,6 +1,5 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include <QDebug>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileDialog>
@@ -11,28 +10,84 @@
 #include <QCoreApplication>
 #include <QtConcurrent/QtConcurrent>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
+#include "NanoLog.h"
+void formatQStringPath(QString fullPath)
 {
-    ui->setupUi(this);
-    this->setAttribute(Qt::WA_QuitOnClose);
-    this->setWindowTitle("KD_Parent");
-    this->setAcceptDrops(true);
-    ui->statusBarLabel->setText("初始化已经完成");
-    fileName = "";
-    dropStatus = true;
-    cc = nullptr;
-    setWindowIcon(QIcon(":/ico/Resources/ico/main.ico"));
-    QObject::connect(this,SIGNAL(cryptoFinished()),this,SLOT(onSaveBegin()));
+    fullPath.replace("\\","/");
 }
 QString getFileName(QString fullPathAndName)
 {
-    return fullPathAndName.mid(fullPathAndName.lastIndexOf('/')+1);
+    return fullPathAndName.mid(fullPathAndName.lastIndexOf('/'));
 }
-bool isKD_CryptoFile(QString fileName)
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainWindow)
 {
-    return (fileName.mid(fileName.length()-QString(".KD_Crypto").length())==QString(".KD_Crypto"));
+    ui->setupUi(this);
+    this->setAttribute(Qt::WA_QuitOnClose);
+    this->setAcceptDrops(true);
+    ui->statusBarLabel->setText("初始化已经完成");
+    ui->label->raise();
+    setWindowIcon(QIcon(":/Resources/ico/main.ico"));
+    fileName = "";
+    fileType = -1;
+    cc = nullptr;
+    popDialog = new KD_PopDialog(this);
+    initAnimationTimer = new QTimer(this);
+    initAnimationTimer->setInterval(4000);
+    initAnimationTimer->setSingleShot(true);
+
+    connect(initAnimationTimer,SIGNAL(timeout()),ui->label,SLOT(lower()));
+    emit ui->label->startAnimation();
+    initAnimationTimer->start();
+    ui->popWidgetEnter->setAttribute(Qt::WA_Hover,true);//开启悬停事件
+    ui->popWidgetEnter->installEventFilter(this);       //安装事件过滤器
+    QStringList arguments = QCoreApplication::arguments();
+
+    if(arguments.length()==2)
+    {
+        QString fullFileName = arguments.at(1);
+        formatQStringPath(fullFileName);
+        QFileInfo fi(fullFileName);
+        if(fi.isFile())
+        {
+            try {
+                fileType = CryptoControl::is_decrypto_file(fullFileName.toStdString());
+            } catch (std::exception& e) {
+                fileType = -1;
+                LOG_INFO << e.what();
+                return;
+            }
+            if(1 == fileType)
+            {
+                setFileStatus(FileStatus::encryptoFile);
+                ui->statusBarLabel->setText("待解密的文件已经获取");
+                fileName = fullFileName;
+                LOG_INFO << "get crypto file";
+            }
+            if(0 == fileType)
+            {
+                ui->statusBarLabel->setText("待加密的文件已经获取");
+                fileName = fullFileName;
+                setFileStatus(FileStatus::file);
+                LOG_INFO << "get source file";
+            }
+        }
+    }
+}
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if(obj == ui->popWidgetEnter) {
+        if(event->type() == QEvent::HoverEnter) {
+            popDialog->move(this->geometry().x(),this->geometry().y()+50);
+            emit popDialog->startAnimation();
+            return true;
+        }
+        if(event->type() == QEvent::Leave)
+        {
+            emit popDialog->closeAnimation();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj,event);
 }
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
 {
@@ -41,17 +96,17 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event)
 }
 void MainWindow::dropEvent(QDropEvent *event)
 {
-    if(!dropStatus)
-        return;
     QList<QUrl> urls = event->mimeData()->urls();
     if(urls.isEmpty())
     {
         ui->statusBarLabel->setText("似乎是空的，请重试");
+        LOG_INFO << "enpty try again";
         return;
     }
     if(urls.size()>1)
     {
         ui->statusBarLabel->setText("不支持多个文件");
+        LOG_INFO << "no support files";
         return;
     }
     for(auto url=urls.begin();url!=urls.end();url++) {
@@ -59,72 +114,65 @@ void MainWindow::dropEvent(QDropEvent *event)
         if(fileInfo.isDir())
         {
             ui->statusBarLabel->setText("不支持加密文件夹");
-            qDebug()<<(*url).toLocalFile()<<endl;
+            LOG_INFO << "no support folder";
             return;
         }
         else if(fileInfo.isFile())
         {
-            fileName = (*url).toLocalFile();
-            qDebug()<<fileName<<endl;
-            if(fileName.length()>QString(".KD_Crypto").length()){
-                if(isKD_CryptoFile(fileName))
-                {
-                    ui->statusBarLabel->setText("待解密的文件已经获取\n"+getFileName(fileName));
-                    return;
-                }
+            try {
+                fileType = CryptoControl::is_decrypto_file((*url).toLocalFile().toStdString());
+            } catch (std::exception& e) {
+                fileType = -1;
+                LOG_INFO << e.what();
+                return;
             }
-            ui->statusBarLabel->setText("待加密的文件已经获取\n"+getFileName(fileName));
+            if(1 == fileType)
+            {
+                setFileStatus(FileStatus::encryptoFile);
+                ui->statusBarLabel->setText("待解密的文件已经获取");
+                LOG_INFO << "get decrypto file";
+                fileName = (*url).toLocalFile();
+                return;
+            }
+            if(0 == fileType)
+            {
+                ui->statusBarLabel->setText("待加密的文件已经获取");
+                LOG_INFO << "get source file";
+                fileName = (*url).toLocalFile();
+                setFileStatus(FileStatus::file);
+                return;
+            }
         }
     }
-    qDebug()<<fileName<<endl;
 }
 
 void MainWindow::keyReleaseEvent(QKeyEvent *event)
 {
-    qDebug()<<"PressKey:"<<event->key()<<endl;
-    if(event->key()==16777216)//ESC
-    {
-        QWidget* widget = new QWidget(this,Qt::Window);
-        QLabel* label = new QLabel("Author KhalDaris\n"
-                                   "Copyright 2020\n",this);
-        widget->setStyleSheet("QLabel{font: 24px;}");
-        label->setAlignment(Qt::AlignCenter);
-        QHBoxLayout* layout = new QHBoxLayout(widget);
-        widget->setMinimumSize(QSize(300,200));
-        widget->setMaximumSize(QSize(300,200));
-        widget->setWindowTitle("About");
-        layout->addWidget(label);
-        widget->setLayout(layout);
-        widget->show();
-    }
     if(event->key()==16777220)//ENTER
     {
-        if(!dropStatus)
+        ui->statusBarLabel->setText("选择保存的文件夹");
+        QString outPutDirPath = QFileDialog::getExistingDirectory(this, "选择文件夹","/");
+        if (outPutDirPath.isEmpty())
             return;
-        dropStatus = false;
-        QString inputKey = ui->lineEdit_key->text();
-        qDebug()<<inputKey<<endl;
-        if(inputKey.isEmpty()||fileName.isEmpty())
+        else
         {
-            if(inputKey.isEmpty())
-            {
-                ui->statusBarLabel->setText("密码为空，请输入些内容");
-                dropStatus = true;
-                return;
-            }
-            if(fileName.isEmpty())
-            {
-                ui->statusBarLabel->setText("请选择一个文件");
-                return;
-            }
+            formatQStringPath(outPutDirPath);
+            outPutDirPath += "/";
         }
-        if(isKD_CryptoFile(fileName))//解密操作
+
+        if(fileName.isEmpty())
+        {
+            ui->statusBarLabel->setText("请选择一个文件");
+            return;
+        }
+
+        if(1 == fileType)
         {
             ui->statusBarLabel->setText("解密中...");
             QFuture<bool> future = QtConcurrent::run([&](){
                 delete this->cc;
-                this->cc = new DeCryptoControl(std::string((const char*)fileName.toLocal8Bit()),ui->lineEdit_key->text().toStdString());
-                this->cc->decrypt();
+                this->cc = new DeCryptoControl();
+                this->cc->process_data(std::string((const char*)fileName.toLocal8Bit()),std::string((const char*)outPutDirPath.toLocal8Bit()),std::string("password"));
                 return true;
             });
             while(!future.isFinished())
@@ -132,13 +180,15 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
                 QApplication::processEvents(QEventLoop::AllEvents, 100);
             }
         }
-        else//加密操作
+        if(0 == fileType)
         {
             ui->statusBarLabel->setText("加密中...");
             QFuture<bool> future = QtConcurrent::run([&](){
                 delete this->cc;
-                this->cc = new EnCryptoControl(std::string((const char*)fileName.toLocal8Bit()),ui->lineEdit_key->text().toStdString(),1);
-                this->cc->encrypt();
+                this->cc = new EnCryptoControl();
+                outPutDirPath += QDateTime::fromTime_t(QDateTime::currentDateTime().toTime_t()).toString("yyyy-MM-dd hh-mm-ss-zzz");
+                outPutDirPath += ".KD_Crypto";
+                this->cc->process_data(std::string((const char*)fileName.toLocal8Bit()),std::string((const char*)outPutDirPath.toLocal8Bit()),std::string("JUNHENGZHIDAOPINGHENGZHIJIAN"));
                 return true;
             });
             while(!future.isFinished())
@@ -147,47 +197,25 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
             }
         }
         ui->statusBarLabel->setText("操作完成");
-        if(cc->isEffective())
-        {
-            emit cryptoFinished();
-        }
-        else
-        {
-            ui->statusBarLabel->setText("发生了错误，错误代码："+QString::number(static_cast<int>(cc->getEffective()),10));
-        }
-        dropStatus = true;
+        LOG_INFO << "finished";
     }
+    QWidget::keyReleaseEvent(event);
 }
 
-void MainWindow::onSaveBegin()
+void MainWindow::setFileStatus(FileStatus fileStatus)
 {
-    ui->statusBarLabel->setText("选择保存的文件夹");
-    QString outPutDirPath = QFileDialog::getExistingDirectory(this, "choose Directory","/");
-    if (outPutDirPath.isEmpty())
-        return;
-    else
+    ui->fileStatus->setToolTip(this->fileName);
+    if(fileStatus == FileStatus::openFile)
     {
-        qDebug() << "outPutDirPath=" << outPutDirPath;
-        outPutDirPath += "/";
+        ui->fileStatus->setStyleSheet("QWidget#fileStatus{border-image: url(:/Resources/ico/openFile.png)}");
     }
+    else if(fileStatus == FileStatus::file)
     {
-        ui->statusBarLabel->setText("正在输出...");
-        QFuture<bool> future = QtConcurrent::run([&](){
-            cc->outFile(outPutDirPath.toStdString());
-            return true;
-        });
-        while(!future.isFinished())
-        {
-            QApplication::processEvents(QEventLoop::AllEvents, 100);
-        }
-    }
-    if(cc->isEffective())
-    {
-        ui->statusBarLabel->setText("已完成");
+        ui->fileStatus->setStyleSheet("QWidget#fileStatus{border-image: url(:/Resources/ico/file.png)}");
     }
     else
     {
-        ui->statusBarLabel->setText("发生了错误，错误代码："+QString::number(static_cast<int>(cc->getEffective()),10));
+        ui->fileStatus->setStyleSheet("QWidget#fileStatus{border-image: url(:/Resources/ico/encryptoFile.png)}");
     }
 }
 MainWindow::~MainWindow()

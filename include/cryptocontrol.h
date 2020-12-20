@@ -1,23 +1,41 @@
 #ifndef CRYPTOCONTROL_H
 #define CRYPTOCONTROL_H
 #include <sys/stat.h>
-#include <string>
-const size_t NORMAL = 1;
-const size_t READ_FILE_ERROR       = 2;   //文件读取错误，请检查权限
-const size_t PROCESS_RUNNING_ERROR = 3;   //程序运行错误，请重试
-const size_t VERIFY_ENCRYPTO_ERROR = 4;   //加密后的文件正确性校验错误
-const size_t VERIFY_PLAIN_ERROR    = 5;   //解密后的文件正确性校验错误
-const size_t OUT_FILE_EXIST_ERROR  = 6;   //输出的路径下存在同名的文件
+#include <picosha2.h>
+#include <aes256.h>
+#include <exceptions.h>
+
+const std::string FILE_MESSAGE_STRING = std::string("6A756E68656E677A686964616F70696E6768656E677A68696A69616E00000001");
+const unsigned char FILE_MESSAGE_ARRAY[65] = "6A756E68656E677A686964616F70696E6768656E677A68696A69616E00000001";
+
 class CryptoControl
 {
 public:
     CryptoControl();
-    virtual bool encrypt();
-    virtual bool decrypt();
-    virtual bool isEffective();
-    virtual size_t getEffective();
-    virtual bool outFile(std::string outFullPath);
+    virtual void process_data(const std::string& in_full_path,const std::string& out_full_path,const std::string& key) = 0;
     virtual ~CryptoControl();
+    static int is_decrypto_file(const std::string& file_name);
+protected:
+    void in_file(const std::string& in_path, const std::string& file_name,std::vector<unsigned char>& result_vec);
+    void in_file(const std::string& in_full_path,std::vector<unsigned char>& result_vec);
+    void out_file(const std::string& out_path, const std::string& file_name,std::vector<unsigned char>& result_vec);
+    void out_file(const std::string& out_full_path,std::vector<unsigned char>& result_vec);
+    std::string& format_string_to_full_path(std::string& path, const std::string& file_name);
+    template <typename RaIter>
+    std::string create_hash256_string (RaIter first, RaIter last)
+    {
+        picosha2::hash256_one_by_one hasher;
+        hasher.init();
+        hasher.process(first,last);
+        hasher.finish();
+        std::string hex_str;
+        picosha2::get_hash_hex_string(hasher, hex_str);
+        return hex_str;
+    }
+protected:
+    std::vector<unsigned char> key;
+    std::vector<unsigned char> plain;
+    std::vector<unsigned char> encrypted;
 };
 
 #endif // CRYPTOCONTROL_H
